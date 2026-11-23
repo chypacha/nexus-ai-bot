@@ -13,7 +13,10 @@ from telegram.ext import (
 
 logging.basicConfig(level=logging.INFO)
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+client = OpenAI(
+    api_key=os.environ["GROQ_API_KEY"],
+    base_url="https://api.groq.com/openai/v1",
+)
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
@@ -54,13 +57,15 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages[:] = messages[-20:]
 
     try:
-        response = client.responses.create(
-            model="gpt-5-mini",
-            instructions=SYSTEM_PROMPT,
-            input=messages,
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *messages,
+            ],
         )
 
-        answer = response.output_text
+        answer = response.choices[0].message.content or ""
         messages.append({"role": "assistant", "content": answer})
 
         for i in range(0, len(answer), 4000):
@@ -81,17 +86,17 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, chat)
     )
 
-    logging.info("Запускаем NEXUS AI через Webhook")
+    logging.info("Запускаем NEXUS AI через Groq Webhook")
 
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=WEBHOOK_SECRET,
         webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}",
-        
         secret_token=WEBHOOK_SECRET,
     )
 
 
 if __name__ == "__main__":
     main()
+
