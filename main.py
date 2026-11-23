@@ -87,7 +87,8 @@ def main():
         listen="0.0.0.0",
         port=PORT,
         url_path=WEBHOOK_SECRET,
-        webhook_url=f"{RENDER_URL}/",
+        webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}",
+        
         secret_token=WEBHOOK_SECRET,
     )
 
