@@ -419,7 +419,10 @@ async def photo_handler(
 # =========================
 # ЗАПУСК БОТА
 # =========================
-
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"🆔 ID твоего чата:\n{update.effective_chat.id}"
+    )
 def main():
 
     app = Application.builder().token(TOKEN).build()
@@ -431,6 +434,7 @@ def main():
     app.add_handler(
         CommandHandler("help", help_command)
     )
+    app.add_handler(CommandHandler("id", id_command))
 
     app.add_handler(
         CommandHandler("clear", clear_command)
