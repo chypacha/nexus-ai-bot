@@ -434,7 +434,9 @@ def main():
     app.add_handler(
         CommandHandler("help", help_command)
     )
-    app.add_handler(CommandHandler("id", id_command))
+    app.add_handler(
+        CommandHandler("id", id_command)
+    )
 
     app.add_handler(
         CommandHandler("clear", clear_command)
