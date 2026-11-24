@@ -1,0 +1,110 @@
+
+import os
+import logging
+import asyncio
+
+from aiohttp import web
+from openai import AsyncOpenAI
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("CHYPACHA")
+
+client = AsyncOpenAI(
+    api_key=os.environ["GROQ_API_KEY"],
+    base_url="https://api.groq.com/openai/v1",
+    timeout=60.0,
+    max_retries=2,
+)
+
+MODEL = "openai/gpt-oss-20b"
+
+SYSTEM_PROMPT = """
+Ты — Chypacha AI, интеллектуальный персональный ИИ-помощник.
+
+Отвечай точно, понятно и дружелюбно.
+Общайся на русском языке, если пользователь не просит другой.
+Для школьных задач используй понятные пошаговые объяснения.
+Не выдумывай факты.
+Химические реакции записывай обычным текстом.
+"""
+
+history = {}
+locks = {}
+
+CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+}
+
+async def chat(request):
+    try:
+        data = await request.json()
+
+        question = str(data.get("message", "")).strip()
+        session_id = str(data.get("session_id", "")).strip()
+
+        if not question or not session_id:
+            return web.json_response(
+                {"error": "Пустое сообщение"},
+                status=400,
+                headers=CORS,
+            )
+
+        if len(question) > 10000 or len(session_id) > 100:
+            return web.json_response(
+                {"error": "Слишком длинный запрос"},
+                status=400,
+                headers=CORS,
+            )
+
+        lock = locks.setdefault(session_id, asyncio.Lock())
+
+        async with lock:
+            messages = history.get(session_id, [])
+
+            response = await client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *messages,
+                    {"role": "user", "content": question},
+                ],
+            )
+
+            answer = response.choices[0].message.content or ""
+
+            messages = messages + [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer},
+            ]
+
+            history[session_id] = messages[-20:]
+
+        return web.json_response(
+            {"answer": answer},
+            headers=CORS,
+        )
+
+    except Exception:
+        logger.exception("Ошибка Chypacha AI")
+
+        return web.json_response(
+            {"error": "Не удалось получить ответ ИИ"},
+            status=500,
+            headers=CORS,
+        )
+
+async def options(request):
+    return web.Response(headers=CORS)
+
+app = web.Application()
+app.router.add_post("/api/chat", chat)
+app.router.add_options("/api/chat", options)
+
+if __name__ == "__main__":
+    web.run_app(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+    )
