@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#212121">
+<title>Chypacha AI</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #212121;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, Arial;
+}
+
+header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid #383838;
+}
+
+.logo {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+button {
+  border: none;
+  color: white;
+  background: #303030;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+main {
+  max-width: 750px;
+  margin: auto;
+  padding: 20px 16px 110px;
+}
+
+.welcome {
+  text-align: center;
+  margin-top: 23vh;
+}
+
+.welcome h1 {
+  font-size: 30px;
+}
+
+.welcome p {
+  color: #aaa;
+}
+
+#messages {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.message {
+  padding: 14px 17px;
+  border-radius: 18px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user {
+  background: #303030;
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.ai {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.input-area {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 14px calc(15px + env(safe-area-inset-bottom));
+  background: #212121;
+}
+
+.input-box {
+  max-width: 750px;
+  margin: auto;
+  display: flex;
+  gap: 8px;
+  background: #303030;
+  border-radius: 25px;
+  padding: 8px;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: white;
+  font-size: 16px;
+  padding: 8px;
+}
+
+.send {
+  background: white;
+  color: black;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">Chypacha AI</div>
+  <button onclick="newChat()">＋</button>
+</header>
+
+<main>
+
+  <div class="welcome" id="welcome">
+    <h1>Чем могу помочь?</h1>
+    <p>Спроси что-нибудь у Chypacha AI</p>
+  </div>
+
+  <div id="messages"></div>
+
+</main>
+
+<div class="input-area">
+  <div class="input-box">
+
+    <input
+      id="question"
+      placeholder="Напиши сообщение..."
+      onkeydown="if(event.key==='Enter')sendMessage()"
+    >
+
+    <button class="send" onclick="sendMessage()">↑</button>
+
+  </div>
+</div>
+
+<script>
+
+function sendMessage() {
+
+  const input = document.getElementById('question');
+  const value = input.value.trim();
+
+  if (!value) return;
+
+  document.getElementById('welcome').style.display = 'none';
+
+  const messages = document.getElementById('messages');
+
+  const user = document.createElement('div');
+  user.className = 'message user';
+  user.textContent = value;
+
+  messages.appendChild(user);
+
+  const answer = document.createElement('div');
+  answer.className = 'message ai';
+  answer.textContent = 'Скоро здесь будет ответ Chypacha AI...';
+
+  messages.appendChild(answer);
+
+  input.value = '';
+
+}
+
+function newChat() {
+
+  document.getElementById('messages').innerHTML = '';
+
+  document.getElementById('welcome').style.display = 'block';
+
+}
+
+</script>
+
+</body>
+</html>
