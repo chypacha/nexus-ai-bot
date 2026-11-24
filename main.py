@@ -2,6 +2,7 @@
 import os
 import logging
 import asyncio
+import base64
 
 from openai import AsyncOpenAI
 from telegram import Update
@@ -25,11 +26,20 @@ logging.basicConfig(
 
 logger = logging.getLogger("NEXUS")
 
-client = AsyncOpenAI(
+# Обычный текстовый ИИ — GROQ
+groq_client = AsyncOpenAI(
     api_key=os.environ["GROQ_API_KEY"],
     base_url="https://api.groq.com/openai/v1",
     timeout=60.0,
     max_retries=2,
+)
+
+# Анализ фотографий — OPENROUTER
+vision_client = AsyncOpenAI(
+    api_key=os.environ["OPENROUTER_API_KEY"],
+    base_url="https://openrouter.ai/api/v1",
+    timeout=120.0,
+    max_retries=0,
 )
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -37,7 +47,9 @@ WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 RENDER_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/")
 PORT = int(os.environ.get("PORT", "10000"))
 
-MODEL = "openai/gpt-oss-20b"
+TEXT_MODEL = "openai/gpt-oss-20b"
+VISION_MODEL = "nvidia/nemotron-3.5-super-vl:free"
+
 MAX_HISTORY = 20
 MAX_MESSAGE_LENGTH = 3900
 
@@ -62,6 +74,7 @@ SYSTEM_PROMPT = """
 - Решение математических задач.
 - Программирование.
 - Техника и ремонт.
+- Анализ фотографий.
 - Творчество.
 - Переводы.
 - Объяснение сложных тем.
@@ -111,9 +124,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "👋 Привет! Я NEXUS AI.\n\n"
         "🤖 Твой персональный ИИ-помощник.\n\n"
-        "Я умею помогать с учёбой, программированием, "
-        "техникой, творчеством и многим другим.\n\n"
-        "💬 Просто напиши мне сообщение, и мы начнём!\n\n"
+        "Я умею общаться, помогать с учёбой, "
+        "программированием, техникой и анализировать фотографии.\n\n"
+        "📸 Просто отправь мне фотографию, "
+        "и я постараюсь её разобрать!\n\n"
         "Команда /help покажет мои возможности."
     )
 
@@ -130,7 +144,8 @@ async def help_command(
 ):
     text = (
         "📚 NEXUS AI — справка\n\n"
-        "💬 Просто отправь мне сообщение.\n\n"
+        "💬 Отправь мне текстовое сообщение, чтобы начать общение.\n"
+        "📸 Отправь фотографию, чтобы я её проанализировал.\n\n"
         "Доступные команды:\n"
         "/start — начать общение\n"
         "/help — помощь\n"
@@ -164,7 +179,7 @@ async def clear_command(
 
 
 # =========================
-# ОСНОВНОЙ ИИ
+# ОБЫЧНЫЙ ТЕКСТОВЫЙ ИИ
 # =========================
 
 async def chat(
@@ -193,8 +208,8 @@ async def chat(
                 + [{"role": "user", "content": question}]
             )
 
-            response = await client.chat.completions.create(
-                model=MODEL,
+            response = await groq_client.chat.completions.create(
+                model=TEXT_MODEL,
                 messages=[
                     {
                         "role": "system",
@@ -224,11 +239,127 @@ async def chat(
             )
 
         except Exception:
-            logger.exception("Ошибка NEXUS AI")
+            logger.exception("Ошибка текстового ИИ")
 
             await update.message.reply_text(
-                "⚠️ Произошла ошибка.\n\n"
+                "⚠️ Не удалось получить ответ.\n\n"
                 "Попробуй повторить запрос немного позже."
+            )
+
+
+# =========================
+# АНАЛИЗ ФОТОГРАФИЙ
+# =========================
+
+async def photo_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    chat_id = update.effective_chat.id
+    message = update.message
+
+    lock = chat_locks.setdefault(chat_id, asyncio.Lock())
+
+    async with lock:
+        try:
+            await context.bot.send_chat_action(
+                chat_id=chat_id,
+                action=ChatAction.TYPING,
+            )
+
+            # Берём фотографию максимального качества
+            photo = message.photo[-1]
+
+            telegram_file = await context.bot.get_file(
+                photo.file_id
+            )
+
+            image_bytes = await telegram_file.download_as_bytearray()
+
+            # Переводим фотографию в Base64
+            image_base64 = base64.b64encode(
+                bytes(image_bytes)
+            ).decode("utf-8")
+
+            image_url = (
+                f"data:image/jpeg;base64,{image_base64}"
+            )
+
+            # Если пользователь добавил подпись к фото
+            question = (
+                message.caption.strip()
+                if message.caption
+                else "Подробно проанализируй эту фотографию."
+            )
+
+            old_messages = get_history(chat_id)
+
+            vision_messages = [
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                },
+                *old_messages,
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": question,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url,
+                            },
+                        },
+                    ],
+                },
+            ]
+
+            # Отправляем фотографию в OpenRouter
+            response = await vision_client.chat.completions.create(
+                model=VISION_MODEL,
+                messages=vision_messages,
+                max_tokens=1200,
+            )
+
+            answer = response.choices[0].message.content
+
+            if not answer:
+                answer = "Не удалось проанализировать фотографию."
+
+            # Сохраняем текстовое описание фото в истории
+            history[chat_id] = (
+                old_messages
+                + [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"[Пользователь отправил фотографию. "
+                            f"Вопрос: {question}]"
+                        ),
+                    },
+                    {
+                        "role": "assistant",
+                        "content": answer,
+                    },
+                ]
+            )[-MAX_HISTORY:]
+
+            await send_long_message(
+                message,
+                answer,
+            )
+
+        except Exception:
+            logger.exception("Ошибка анализа фотографии")
+
+            await message.reply_text(
+                "⚠️ Не удалось проанализировать фотографию.\n\n"
+                "Возможно, бесплатная модель временно недоступна "
+                "или закончился дневной лимит.\n\n"
+                "Попробуй ещё раз немного позже."
             )
 
 
@@ -254,12 +385,19 @@ def main():
 
     app.add_handler(
         MessageHandler(
+            filters.PHOTO,
+            photo_handler,
+        )
+    )
+
+    app.add_handler(
+        MessageHandler(
             filters.TEXT & ~filters.COMMAND,
             chat,
         )
     )
 
-    logger.info("NEXUS AI 2.0 запускается...")
+    logger.info("NEXUS AI 2.2 запускается...")
 
     app.run_webhook(
         listen="0.0.0.0",
@@ -272,3 +410,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
