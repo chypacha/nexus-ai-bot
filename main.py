@@ -166,6 +166,32 @@ def get_history(chat_id):
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # =========================
 
+import re
+
+def clean_math(text):
+    # Убираем математические блоки
+    text = re.sub(r'\\\[|\\\]', '', text)
+    text = re.sub(r'\\\(|\\\)', '', text)
+    text = re.sub(r'\$\$|\$', '', text)
+
+    # Убираем оформление LaTeX
+    text = re.sub(r'\\mathrm\{([^{}]*)\}', r'\1', text)
+    text = re.sub(r'\\text\{([^{}]*)\}', r'\1', text)
+
+    # Преобразуем индексы
+    text = re.sub(r'_\{([^{}]*)\}', r'\1', text)
+    text = re.sub(r'_([0-9])', r'\1', text)
+
+    # Убираем лишние команды и пробелы
+    text = text.replace(r'\longrightarrow', '→')
+    text = text.replace(r'\rightarrow', '→')
+    text = text.replace(r'\times', '×')
+    text = text.replace(r'\;', ' ')
+    text = text.replace(r'\,', ' ')
+    text = text.replace(r'\quad', ' ')
+
+    return text.strip()
+
 async def send_long_message(message, text):
     if not text:
         text = "Не удалось получить ответ."
@@ -280,6 +306,7 @@ async def chat(
             )
 
             answer = response.choices[0].message.content
+            answer = clean_math(answer)
 
             if not answer:
                 answer = "Не удалось сформировать ответ."
@@ -385,6 +412,7 @@ async def photo_handler(
             )
 
             answer = response.choices[0].message.content
+            answer = clean_math(answer)
 
             if not answer:
                 answer = "Не удалось проанализировать фотографию."
